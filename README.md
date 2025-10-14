@@ -11,3 +11,9 @@ I decided to use python to decode the the media because there are very useful an
 ![Process Diagram](./process.png)
 
 After listening to the decoded audio file, I simply enter the answer as a `POST` json body to `http://localhost:3000/response` and then get a `Success` event.
+
+## To run:
+
+First run the node server `node ws_client.mjs`
+
+Then once the web socket has finished relaying the chunks, run `python3 decode_audio.py`.
