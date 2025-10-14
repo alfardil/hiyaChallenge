@@ -1,22 +1,8 @@
 import json
 import base64
 import wave
-import struct
-
-# super simple decoder for μ-law -> 16-bit PCM
-def ulaw_to_pcm16(b):
-    u = (~b) & 0xFF
-    sign = u & 0x80
-    exp = (u >> 4) & 7
-    man = u & 0x0F
-    t = ((man << 3) + 132) << exp  # 132 is the bias
-    x = t - 132
-    if sign:
-        x = -x
-    # clamp to int16
-    if x > 32767: x = 32767
-    if x < -32768: x = -32768
-    return x
+import g711
+import numpy as np
 
 INPUT_FILE = "messages.jsonl"
 OUTPUT_WAV = "out.wav"
@@ -58,27 +44,33 @@ for obj in msgs:
         except Exception:
             chunk = 0
         try:
-            ts = float(m.get("timestamp", 0))
+            timestamp = float(m.get("timestamp", 0))
         except Exception:
-            ts = 0.0
-        frames.append((chunk, ts, raw))
+            timestamp = 0.0
+        frames.append((chunk, timestamp, raw))
 
 # sort by chunk
 frames.sort(key=lambda x: (x[0]))
 
-# concatenate μ-law bytes
+# concatenate u-law bytes
 mulaw_bytes = b"".join(raw for _, __, raw in frames)
 
-# decode to little-endian int16
-pcm = bytearray()
-for b in mulaw_bytes:
-    pcm += struct.pack("<h", ulaw_to_pcm16(b))
+# decode u-law to PCM16 using g711
+pcm_float = g711.decode_ulaw(mulaw_bytes)
+
+# CONVERSION STEP:
+# Scale the float values from [-1.0, 1.0] to [-32768, 32767]
+# and convert to 16-bit integer format.
+pcm_int16 = np.int16(pcm_float * 32767)
+
+# convert the NumPy array to a bytes object for wave.writeframes()
+pcm_bytes = pcm_int16.tobytes()
 
 # write wav (8kHz mono, 16-bit)
 with wave.open(OUTPUT_WAV, "wb") as wf:
     wf.setnchannels(1)
     wf.setsampwidth(2)
     wf.setframerate(8000)
-    wf.writeframes(pcm)
+    wf.writeframes(pcm_bytes)
 
-print("Wrote", OUTPUT_WAV, "samples:", len(pcm)//2, "frames:", len(frames))
+print("Wrote", OUTPUT_WAV, "samples:", len(pcm_int16), "frames:", len(frames))
